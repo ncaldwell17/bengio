@@ -168,19 +168,22 @@ class BengioModel:
                                                                                        logits=y_probability_distribution))
 
             # stochastic gradient descent optimizer
-            learning_rate = 0.001
-            beta1 = 0.9
+            learn_rate = 0.00075
+            beta1 = 0.9;
             beta2 = 0.999
-            adam = tf.train.AdamOptimizer(learning_rate, beta1, beta2).minimize(self.ce_result)
+            adam = tf.train.AdamOptimizer(learn_rate, beta1, beta2).minimize(self.ce_result)
             ra = tf.equal(y_ideal, self.y_input)
             self.accuracy = tf.reduce_mean(tf.cast(ra, tf.float32))
 
-            self.session = tf.Session()
+            # enables running of session on GPU
+            config = tf.ConfigProto(allow_soft_placement=True)
+            self.session = tf.Session(config=config)
             self.session.run(tf.initializers.global_variables())
             saver = tf.train.Saver()
 
             print('training beginning . . . . .')
             global training_accuracy, training_cost
+            patience = 2
             for i in range(num_epochs):
                 batches = make_batches(training_data,
                                        self.batch_size,
@@ -199,21 +202,10 @@ class BengioModel:
                     completion = 100 * batch_count / total_batches
                     if batch_count % (int(total_batches / num_messages)) == 0:
                         print('Epoch #%2d-   Batch #%5d:   %4.2f %% completed.' % (i + 1, batch_count, completion))
-                        a_t, c_t = self.test(training_data)
-                        a, c = self.test(validation_data)
+                        a_t, c_t = self.test(train_data)
+                        a, c = self.test(validate_data)
                         training_accuracy.append(a)
                         training_cost.append(c)
-
-                        if sum(training_cost[-4:]) > sum(training_cost[-8:-4]):
-                            patience = patience - 1
-                        else:
-                            patience = 2
-
-                        if patience == 0:
-                            print("Cost Too High, Early Stop Activated")
-                            save_path = saver.save(self.session, "../models/" + a2 + '_' + a3 + ".ckpt")
-                            print("Model saved in path: %s" % save_path)
-                            return
 
         print("Training is finished")
         save_path = saver.save(self.session, "../models/" + a2 + '_' + a3 + ".ckpt")
@@ -275,15 +267,13 @@ class BengioModel:
                                                                                             y_probability_distribution))
 
             # stochastic gradient descent optimizer
-            learning_rate = 0.001
+            learning_rate = 0.00075
             beta1 = 0.9
             beta2 = 0.999
             adam = tf.train.AdamOptimizer(learning_rate, beta1, beta2).maximize(self.ce_result)
             ra = tf.equal(y_ideal, self.y_input)
             self.accuracy = tf.reduce_mean(tf.cast(ra, tf.float32))
 
-            self.session = tf.Session()
-            self.session.run(tf.global_variables_initalizer())
             saver = tf.train.Saver()
 
             with tf.Session() as session:
@@ -326,7 +316,7 @@ a2 = sys.argv[2]
 a3 = sys.argv[3]
 
 user_inputs = {'MLP1': {'window_size': 5, 'hidden_units': 50, 'embedding_size': 60, 'direct': True, 'mix': False},
-           'MLP5': {'window_size': 5, 'hidden_units': 0, 'embedding_size': 30, 'direct': True, 'mix': False}}
+               'MLP5': {'window_size': 5, 'hidden_units': 0, 'embedding_size': 30, 'direct': True, 'mix': False}}
 
 corpora = ['wiki', 'brown']
 
@@ -353,7 +343,7 @@ if __name__ == "__main__":
         validate_data = corpus.generate_data(validation_path)
         test_data = corpus.generate_data(test_path)
         model = BengioModel()
-        acc_hist_train, cost_hist_train = [.1] * 10, [7] * 10
+        training_accuracy, training_cost = [.1] * 10, [7] * 10
         model.train_model(train_data, validate_data)
         plot_learning(training_accuracy[10:], training_cost[10:])
 
@@ -368,7 +358,7 @@ if __name__ == "__main__":
             validation_path = "data/wiki.valid.txt"
             test_path = "data/wiki.test.txt"
 
-        configuration = configs[a2]
+        user_input = user_inputs[a2]
         corpus = Preprocessor(train_path)
         vocab_size = corpus.vocab_size
         test_data = corpus.generate_data(test_path)
